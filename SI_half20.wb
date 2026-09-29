@@ -1,0 +1,101 @@
+{
+    "version":"0.5",
+    "coordinate system":{"model":"cartesian"},
+    "cross section":[[0e03,0e03],[100e03,0e03]],
+
+    "features":[
+        { 
+        "model":"mantle layer", // astenosfera di fondo
+        "name":"asthenosphere", 
+        "coordinates":[[0e03,-10e03],[3000e03,-10e03],[3000e03,10e03],[0e3,10e03]],
+        "min depth":0e03, 
+        "max depth":700e03,
+        "composition models":[{ "model":"uniform", 
+                                "compositions":[1]}], //asthenosphere
+        "temperature models":[{ "model":"uniform",
+                                "temperature":1635}]
+                            },
+
+        {
+        "model":"oceanic plate", "name":"oceanic plate", "max depth":90e3, 
+        "coordinates":[[1400e03,-10e03],[3000e03,-10e03],[3000e03,10e03],[1400e3,10e03]],
+        "temperature models":
+            [{"model":"half space model", "max depth":90e3, "spreading velocity":0.08, //lenght=1600 km, Age=20 Myr
+                "ridge coordinates":[[[3133e03,-10e03],[3133e03,10e03]]]}],
+        "composition models":
+            [
+            {"model":"uniform", 
+             "compositions":[2], // OLM oceanic lithospheric mantle 
+              "max depth":90e3},
+            {"model":"uniform", 
+             "compositions":[4],  //UOC: plagioclase =basalt (?)
+             "max depth": 8e03,
+             "min depth": 0e3},
+            {"model":"uniform", 
+             "compositions":[5],  //LOC: plagiocalse = gabbro
+             "max depth": 8e03,
+             "min depth": [[ 8e03,[[1533e03,0e03]]],
+                           [ 2e03,[[1612e03,0e03]]],
+                           [ 2e03,[[3000e03,0e03]]]]}
+            ]
+        },
+
+        {
+            "model":"continental plate", "name":"Passive margin", "max depth":[[90e3]],
+            "min depth": [[  0e03,[[   0e03,0e03]]],
+                          [  0e03,[[1520e03,0e03]]],
+                          [  8e03,[[1533e03,0e03]]]],
+            "coordinates":[[0e03,-10e03],[1533e03,-10e03],[1533e03,10e03],[0e3,10e03]],
+            "temperature models":
+            [
+                {"model":"linear", 
+                "max depth": [[ 44e03,[[   0e03,0e03]]],
+                        [ 44e03,[[1483e03,0e03]]],
+                        [  8e03,[[1533e03,0e03]]]],
+                "min depth": [[  0e03,[[   0e03,0e03]]],
+                            [  0e03,[[1521e03,0e03]]],
+                           [  8e03,[[1533e03,0e03]]]],
+                "top temperature":273.15, 
+                "bottom temperature":1177.15},
+                {"model":"linear", 
+                "max depth":[[90e03,[[   0e03,0e03]]],
+                            [90e03,[[1460e03,0e03]]],
+                            [0e03, [[1533e03,0e03]]]],
+                "min depth": [[ 44e03,[[   0e03,0e03]]],
+                        [ 44e03,[[1483e03,0e03]]],
+                        [  8e03,[[1533e03,0e03]]]],
+                "top temperature":1177.15, 
+                "bottom temperature":1613.15}
+            ],
+            "composition models":
+            [
+                {"model":"uniform", 
+                 "compositions":[3], //CLM continental lithospheric mantle
+                 "max depth":[[90e03,[[   0e03,0e03]]],
+                              [90e03,[[1460e03,0e03]]],
+                              [0e03, [[1533e03,0e03]]]],
+                 "min depth": [[  0e03,[[   0e03,0e03]]],
+                               [  0e03,[[1520e03,0e03]]],
+                               [  8e03,[[1533e03,0e03]]]]},
+                    {"model":"uniform", 
+                    "compositions":[6], //lower continental crust
+                    "max depth": [[ 44e03,[[   0e03,0e03]]],
+                                    [ 44e03,[[1482e03,0e03]]],
+                                    [  8e03,[[1533e03,0e03]]]],
+                    "min depth": [[  0e03,[[   0e03,0e03]]],
+                                    [  0e03,[[1520e03,0e03]]],
+                                    [  8e03,[[1533e03,0e03]]]]},
+                    {"model":"uniform", 
+                    "compositions":[7],  // upper continental crust
+                    "max depth": [[ 33e03,[[   0e03,0e03]]],
+                                    [ 33e03,[[1482e03,0e03]]],
+                                    [  8e03,[[1533e03,0e03]]]],
+                    "min depth": [[  0e03,[[   0e03,0e03]]],
+                                    [  0e03,[[1520e03,0e03]]],
+                                    [  8e03,[[1533e03,0e03]]]]}
+                                       
+                                       ]
+             }
+    ]
+
+    }
