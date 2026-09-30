@@ -1,7 +1,8 @@
-  *.pyc
-  .ipynb_checkpoints/
-  .DS_Store
-  output/
-  outputs/
-  figures/
-  Tracking/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
+PostProcessing/output/
+PostProcessing/outputs/
+PostProcessing/figures/
+Tracking/
+__pycache__/
