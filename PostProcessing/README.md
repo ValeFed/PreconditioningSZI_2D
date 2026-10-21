@@ -9,22 +9,36 @@ This directory processes the model results and produces:
 
 Colours, fonts, linewidths and line styles of the figures can be configured in `config.py`.
 
-## Step 1: Strain rate tracking
+## Step 1: Trench tracking
+
+`TrenchVelocityTrackingUDNode.f90` extracts the position of the trench from tje model results. The strain rate tracking (Step 2) expects their output under `../Tracking/`.
+
+``` bash
+    gfortran TrenchVelocityTrackingUDNode.f90
+    ./a.out
+```
+
+## Step 2: Strain rate tracking
 
 `SRTracking.f90` extracts the evolution of the strain rate within the OCT from the model results.
-The Python workflow (Step 2) expects their `SR2_*.txt` output under `../Tracking/`.
+The Python workflow (Step 3) expects their `SR2_*.txt` output under `../Tracking/`.
 
 ``` bash
     gfortran SRTracking.f90
+    ./a.out
 ```
 
-## Step 2: python workflow
+## Step 3: python workflow
 
-The python workflow assesses the time of strain rate localisation and subduction zone initition starting from the tracking files, which are the output of the Step 1.
+The python workflow assesses the time of strain rate localisation and subduction zone initition starting from the tracking files, which are the output of the Step 2.
+
+The workflow starts by running:
 
 ``` bash
     python3 main.py
 ```
+
+It's possible, but not mandatory, to modify some configuration variables within the config.py file.
 
 ### config.py
 

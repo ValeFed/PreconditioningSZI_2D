@@ -14,7 +14,7 @@ program sr_tracking
   character(len=8)  :: visco_short(3), plast_short(3), force_short(25)
   logical :: file_exists, dir_exists
 
-  ! Definizione delle possibili combinazioni
+  ! Define the model parameters combinations
   viscosity = (/'B_ev5-10 ', 'C_ev02-05', 'D_ev05-15'/)
   visco_short = (/'B', 'C', 'D'/)
 
@@ -36,17 +36,17 @@ force_short = (/'spont   ', 'f_v1    ', 'f_v05   ', 'f_v025  ', &
       'p2_v025 ', 'p2_v01  ', 'p2_v005 ', 'p2_v001 ', 'p3_v1   ', 'p3_v05  ',&
       'p3_v025 ', 'p3_v01  ', 'p3_v005 ', 'p3_v001 '/)
 
-  ! Definizione delle cartelle
+  ! Define the directories
   base_dir = "/media/valeria/LaCie/BACKUP_PHD_FEDELI/DOTTORATO/SI_passiveMargin/Output_models/VF_PassiveMargin/"
   tracking_dir = "Tracking/"
 
   open(unit=99, file=trim(base_dir)//"Griglia_final", status='old', iostat=stat)
   if (stat /= 0) then
-    print *, "Errore: impossibile aprire Griglia_final"
+    print *, "Error: impossible to open Griglia_final"
     stop
   end if
 
-  do i=1,5; read(99,*); end do  ! Salta le prime 5 righe
+  do i=1,5; read(99,*); end do  ! skip the first 5 lines of the file
   do i = 1, max_nodes
     read(99,*) inode, xn(inode), yn(inode)
   end do
@@ -56,36 +56,36 @@ force_short = (/'spont   ', 'f_v1    ', 'f_v05   ', 'f_v025  ', &
   end do
   close(99)
 
-  ! Loop sulle combinazioni di modelli
+  ! loop on parameters combinations
   do v = 1, 3
     do p = 1, 3
       do f = 1, 25
-        ! Creazione del percorso della cartella Grid
+        ! path to the grid files for the current combination of parameters
         grid_dir = trim(base_dir) // trim(viscosity(v)) // "/20Ma_Eq3/" // trim(plasticity(p)) // "/" // &
                    trim(forcing(f)) // "/txt_files/Grid/"
         trench_filename = trim(tracking_dir)//"Trench_"//trim(visco_short(v))//"_"//trim(plast_short(p))&
                               //"_"//trim(force_short(f))//".txt"
-        ! Verifica se la cartella esiste
+        ! verify if the directory exists
         inquire(file=grid_dir, exist=dir_exists)
         if (.not. dir_exists) then
-          print *, "La cartella non esiste: ", visco_short(v), plast_short(p), force_short(f)
-          cycle  ! Passa alla prossima combinazione se la cartella non esiste
+          print *, "Error: directory not found: ", visco_short(v), plast_short(p), force_short(f)
+          cycle  ! if the directory does not exist, skip to the next iteration
         end if
 
-        ! Creazione del nome del file di output
+        ! filename for the output file
         output_filename = trim(tracking_dir) // "SR1_" // trim(visco_short(v)) // "_" // &
                           trim(plast_short(p)) // "_" // trim(force_short(f)) // ".txt"
 
-        ! Controllo se il file esiste già
+        ! verify if the output file already exists
         inquire(file=output_filename, exist=file_exists)
         if (file_exists) then
-          print *, "File già esistente:", visco_short(v), plast_short(p), force_short(f)
-          cycle  ! Salta alla prossima iterazione senza elaborare di nuovo
+          print *, "Error: file already exists: ", visco_short(v), plast_short(p), force_short(f)
+          cycle  ! if the output file already exists, skip to the next iteration
         else 
-          print*, "Creo ",visco_short(v), plast_short(p), force_short(f)
+          print*, "Creating file: ",visco_short(v), plast_short(p), force_short(f)
         endif
 
-        ! Apertura del file di output
+        ! Open input and output files
         open(unit=10, file=output_filename, status='unknown')
         write(10,*) 'Time [Myr],  Nel,  Nsrmin,  SRmean, xmin, xmax'
 
@@ -93,11 +93,11 @@ force_short = (/'spont   ', 'f_v1    ', 'f_v05   ', 'f_v025  ', &
           read(30, '(A)') line
 
 
-        ! Loop sui file dei nodi per il tracking del trench
+        ! Loop over time steps
         do i = 0, 60  
-          Nel=0 ! Numero di nodi all'interno della finestra
-          Nemin = 0 ! Numero di nodi con sr >= srmin
-          SRmean = 0.D0 ! Media dello strain rate per i nodi con sr >= srmin
+          Nel=0 ! Number of nodes within the specified area
+          Nemin = 0 ! A
+          SRmean = 0.D0 ! mSR
 
           write(filename, '(A,I5.5,A)') 'Nodi.', i, '.txt'
           open(unit=20, file=trim(grid_dir)//trim(filename), status='old', iostat=stat)
@@ -105,12 +105,12 @@ force_short = (/'spont   ', 'f_v1    ', 'f_v05   ', 'f_v025  ', &
           read(30,'(F10.3,2F12.3,3F12.3)') tT, xT
           if (stat.ne.0) then
             close(10)  
-            exit  ! Esce se il file non esiste
+            exit  ! if there are no more lines to read from the trench file, exit the loop
           end if
 
           read(20, '(A)') line  
 
-          ! Trova la prima cifra nella riga per estrarre il numero
+          ! Finds the position of the first digit in the line and reads the time value from that position
           pos = scan(line, '0123456789')  
           if (pos > 0) then
             read(line(pos:), *) time
@@ -131,7 +131,7 @@ force_short = (/'spont   ', 'f_v1    ', 'f_v05   ', 'f_v025  ', &
               
               Nel = Nel + 1
               
-              ! Controllo per l'area deformata'
+              ! Check if the strain rate is above the threshold and update the mean strain rate accordingly
               if (sr >= srmin) then
                 Nemin = Nemin + 1
                 SRmean = SRmean + sr 
@@ -151,5 +151,5 @@ force_short = (/'spont   ', 'f_v1    ', 'f_v05   ', 'f_v025  ', &
     end do
   end do
 
-  print *, 'Tracking dello strain rate completato per tutti i modelli.'
+  print *, 'Strain rate tracking completed successfully.'
 end program sr_tracking

@@ -45,7 +45,7 @@ program trench_velocity_tracking_udnode
 
   open(unit=99, file=trim(base_dir)//"Griglia_final", status='old', iostat=stat)
   if (stat /= 0) then
-    print *, "Errore: impossibile aprire Griglia_final"
+    print *, "Error: impossible to open file Griglia_final"
     stop
   end if
   do i = 1, 136977
@@ -64,7 +64,7 @@ program trench_velocity_tracking_udnode
 
         inquire(file=trim(grid_dir)//"Elementi.00000.txt", exist=exists)
         if (.not. exists) then
-          print *, "Cartella non trovata: ", visco_short(v), plast_short(p), force_short(f)
+          print *, "Error: directory not found: ", visco_short(v), plast_short(p), force_short(f)
           cycle
         end if
 
@@ -72,7 +72,7 @@ program trench_velocity_tracking_udnode
                               //"_"//trim(force_short(f))//".txt"
         inquire(file=output_filename_OC, exist=exists)
         if (exists) then
-          print*, "File esiste già: ",  visco_short(v), plast_short(p), force_short(f)
+          print*, "Error: file already exists: ",  visco_short(v), plast_short(p), force_short(f)
           cycle
         endif
 
@@ -102,7 +102,6 @@ program trench_velocity_tracking_udnode
           end do
           close(20)
 
-          !print*, id_te, max_x_UCC, conn(id_te,3)
           write(nodi_file,'(A,I5.5,A)') 'Nodi.', i, '.txt'
           open(unit=30,file=trim(grid_dir)//trim(nodi_file),status='old',iostat=stat)
           if (stat/=0) cycle
@@ -112,9 +111,7 @@ program trench_velocity_tracking_udnode
           do            
             read(30,*,iostat=stat) node_id, x, y, vx, vy
             if (stat/=0) exit
-            !print*, time, node_id, x, y, vx!, vy
             if (node_id == conn(id_te,3)) then
-              !PRINT*, node_id, time, x, y, vx, vy, sqrt(vx**2 + vy**2)
               write(13, '(F10.3,2F12.3,3F12.3)') time, x, y, vx, vy, sqrt(vx**2 + vy**2)
             end if
             
