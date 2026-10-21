@@ -1,5 +1,4 @@
 import os
-
 import pandas as pd
 
 from StrainRate import plot_SRabs_singleModel
@@ -39,8 +38,21 @@ COLUMN_RENAME = {
 }
 
 
-def create_df(directory: str, SI_depth, params, maps, style):
-    """Create the database with only the fields used by the reduced workflow."""
+def create_df(directory: str, params, maps, style):
+    """
+    Build the subduction database from tracking files and strain-rate analysis
+
+    Parameters
+    ----------
+    directory : str
+        Directory containing the OLMnew and SR2 tracking files
+    params : object
+        Model ordering and labels used for plotting and dataframe updates
+    maps : object
+        Model, velocity, and naming mappings
+    style : object
+        Plot style configuration passed to the strain-rate analysis
+    """
     records = []
 
     for filename in os.listdir(directory):
@@ -65,7 +77,7 @@ def create_df(directory: str, SI_depth, params, maps, style):
     if df_result.empty:
         raise RuntimeError(f"No OLMnew tracking files found in {directory}")
 
-    # This original function calculates and plots split times for all SR2 traces.
+    # Calculate and plot split times for all SR2 traces
     plot_SRabs_singleModel(df_result, directory, params, maps, style)
 
     df_result["tSL"] = df_result[["t_SL_A", "t_SL_mSR"]].min(axis=1, skipna=True)
@@ -76,7 +88,7 @@ def create_df(directory: str, SI_depth, params, maps, style):
     combined_models = {"Combined_10", "Combined_20", "Combined_30"}
     combined_mask = df_result["type"].isin(combined_models)
 
-    for idx, row in df_result.iterrows():
+    for idx in df_result.index:
         if df_result.at[idx, "trend_A"] == "increasing":
             df_result.at[idx, "t_SZI"] = df_result.at[idx, "tSL"]
 
@@ -98,12 +110,22 @@ def create_df(directory: str, SI_depth, params, maps, style):
     df_result.loc[combined_mask, "dtSZI"] = (combined_with_forced["t_SZI"] - combined_with_forced["t_SZI_forced"]).to_numpy()
 
     df_result = df_result[CSV_COLUMNS]
-    df_result.to_csv("tabella_subduzione.csv", index=False)
-    print("   Database generated: tabella_subduzione.csv")
+    df_result.to_csv("subduction_table.csv", index=False)
+    print("   Database generated: subduction_table.csv")
     return df_result
 
 
-def load_df(maps, path="tabella_subduzione.csv"):
+def load_df(maps, path="subduction_table.csv"):
+    """
+    Load the subduction database and normalize its columns and data types
+
+    Parameters
+    ----------
+    maps : object
+        Mapping configuration used to normalize model type names
+    path : str, optional
+        Path to the generated subduction database
+    """
     df = pd.read_csv(path).rename(columns=COLUMN_RENAME).loc[:, CSV_COLUMNS]
     numeric_cols = [
         "velocity", "gravitational_phase_Myr", "convergent_phase_Myr",

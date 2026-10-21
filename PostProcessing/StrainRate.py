@@ -8,17 +8,25 @@ from scipy.ndimage import gaussian_filter1d
 def analyze_baseline_trend(
     time,
     baseline,
-    threshold_ratio=0.3,
-    min_below_points=1,
     return_diagnostics=False,
     strict_split=False,
     split_mask=None,
 ):
     """
-    Identify the time when the rapid growth phase of the baseline ends, and determine if the trend after that is increasing, decreasing, or stable.
-    
-    The split time is calculated as the intersection point between the processed derivative
-    and the threshold line, using linear interpolation.
+    Identify the baseline split time and classify the post-split trend
+
+    Parameters
+    ----------
+    time : array-like
+        Time samples associated with the baseline
+    baseline : array-like
+        Baseline signal to analyze
+    return_diagnostics : bool, optional
+        If True, include intermediate analysis data in the return value
+    strict_split : bool, optional
+        If True, return no split when no threshold crossing is found
+    split_mask : array-like of bool, optional
+        Mask selecting the samples used to calculate the split
     """
 
 
@@ -28,9 +36,9 @@ def analyze_baseline_trend(
     if split_mask is not None and split_mask.shape != time.shape:
         raise ValueError("split_mask must have the same shape as time/baseline")
 
-    # Seleziona gli indici dove la baseline supera il 5% del massimo (esclude il tratto iniziale quasi piatto).
+    # Select indices where the baseline exceeds 5% of the maximum (exclude the nearly flat initial segment)
     valid = np.where(baseline > np.nanmax(baseline) * 0.05)[0]
-    # Se ci sono meno di 5 punti validi, non c'e informazione sufficiente per identificare uno split affidabile.
+    # If fewer than 5 valid points remain, there is not enough information to identify a reliable split
     if len(valid) < 5:
         if return_diagnostics:
             return None, "stable", None
@@ -38,27 +46,27 @@ def analyze_baseline_trend(
 
     i_start = valid[0]
     i_end = valid[-1] - 2
-    # Taglia il tempo e la baseline sul tratto utile.
+    # Crop time and baseline to the useful segment
     time_crop = time[i_start:i_end]
     baseline_crop = baseline[i_start:i_end]
 
-    # Crea una maschera che mantiene solo i punti finiti simultaneamente in tempo e baseline.
+    # Create a mask retaining only points finite in both time and baseline
     finite_mask = np.isfinite(time_crop) & np.isfinite(baseline_crop)
     time_crop = time_crop[finite_mask]
     baseline_crop = baseline_crop[finite_mask]
     split_mask_crop = split_mask[i_start:i_end][finite_mask] if split_mask is not None else None
-    # Se dopo la pulizia restano meno di 5 punti, interrompe l'analisi.
+    # Stop the analysis if fewer than 5 points remain after cleaning
     if len(time_crop) < 5:
         if return_diagnostics:
             return None, "stable", None
         return None, "stable"
 
-    # Costruisce una maschera per mantenere solo campioni a tempo strettamente crescente (evita dt=0 nel gradiente).
+    # Keep only samples with strictly increasing time (avoid dt=0 in the gradient)
     increasing_mask = np.concatenate(([True], np.diff(time_crop) > 0))
     time_crop = time_crop[increasing_mask]
     baseline_crop = baseline_crop[increasing_mask]
     split_mask_crop = split_mask_crop[increasing_mask] if split_mask_crop is not None else None
-    # Ricontrolla che i punti residui siano sufficienti dopo il filtraggio
+    # Check again that enough points remain after filtering
     if len(time_crop) < 5:
         if return_diagnostics:
             return None, "stable", None
@@ -73,59 +81,51 @@ def analyze_baseline_trend(
     time_diag = time_search
     baseline_diag = baseline_search
 
-    # Calcola la derivata numerica della baseline rispetto al tempo.
+    # Calculate the numerical derivative of the baseline with respect to time
     grad = np.gradient(baseline_search, time_search)
-    # Il gradiente viene usato senza smoothing.
-    grad_proc = grad.copy()
 
-    # Estrae il valore massimo della derivata processata (picco di crescita).
-    peak_grad = np.max(grad_proc)
-    peak_idx = int(np.argmax(grad_proc))
-    # Prende il tratto della derivata dopo il picco per stimare il livello di fondo post-picco.
-    grad_post_peak = grad_proc[peak_idx + 1 :]
-    # Calcola la media post-picco (primi 5 Myr); se il tratto è vuoto usa peak_grad come fallback.
+    # Extract the maximum processed derivative value (growth peak)
+    peak_grad = np.max(grad)
+    peak_idx = int(np.argmax(grad))
+    # Take the derivative segment after the peak to estimate the post-peak background level
+    grad_post_peak = grad[peak_idx + 1 :]
+    # Calculate the post-peak mean (first 5 Myr); if the segment is empty, use peak_grad as fallback
     mean_post_peak_raw = np.mean(grad_post_peak[3:13]) if grad_post_peak.size > 0 else peak_grad
-    # Se la media post-picco è positiva usa quella come riferimento,
-    # altrimenti usa 0 come richiesto.
+    # Use the post-peak mean as reference if it is positive;
+    # otherwise use 0 as required
     mean_post_peak = max(mean_post_peak_raw, 0.0)
-    threshold_reference = mean_post_peak if mean_post_peak_raw > 0 else 0.0
-    # Definisce la threshold come frazione della differenza picco-riferimento.
-    threshold = threshold_reference + threshold_ratio * (peak_grad - threshold_reference)
-    if threshold_reference == 0.0: threshold = 0.0
-    #print(f"Peak gradient: {peak_grad:.3e}, Mean post-peak: {mean_post_peak:.3e}, Threshold reference: {threshold_reference:.3e}, Threshold: {threshold:.3e}")
-    # Inizializza l'indice di split (sarà il campione destro del segmento che attraversa la soglia).
+    threshold = mean_post_peak
+    # Initialize the split index (the right sample of the segment crossing the threshold)
     split_idx = None
-    # Inizializza il tempo di split (sarà l'intersezione interpolata).
+    # Initialize the split time (the interpolated intersection)
     split_time = None
-    # Flag che indica se e stato trovato un crossing reale gradiente-threshold. <- da eliminare
+    # Flag indicating whether a real gradient-threshold crossing was found
     crossing_found = False
 
-    # Avvia la ricerca dal campione successivo al picco per cercare crossing solo nel ramo discendente.
+    # Start at the sample after the peak and search for crossings only on the descending branch
     search_start = max(peak_idx + 1, 1)
-    # Scorre tutti i campioni successivi al picco.
-    for i in range(search_start, len(grad_proc)):
-        # Verifica il crossing dall'alto verso il basso tra due campioni consecutivi.
-        if grad_proc[i - 1] >= threshold and grad_proc[i] <= threshold:
-            # Tempo del punto sinistro del segmento di crossing.
-            x1, y1 = time_search[i - 1], grad_proc[i - 1]
-            # Tempo del punto destro del segmento di crossing.
-            x2, y2 = time_search[i], grad_proc[i]
-            # Se il segmento e ben definito, calcola l'intersezione con interpolazione lineare.
+    # Iterate over all samples after the peak
+    for i in range(search_start, len(grad)):
+        # Check for a crossing from above to below between consecutive samples
+        if grad[i - 1] >= threshold and grad[i] <= threshold:
+            # Time of the left point of the crossing segment
+            x1, y1 = time_search[i - 1], grad[i - 1]
+            # Time of the right point of the crossing segment
+            x2, y2 = time_search[i], grad[i]
+            # If the segment is well-defined, calculate the intersection by linear interpolation
             if abs(y2 - y1) > 1e-15 and abs(x2 - x1) > 1e-12:
-                # Pendenza del segmento locale del gradiente.
+                # Slope of the local gradient segment
                 m = (y2 - y1) / (x2 - x1)
-                # Tempo di intersezione tra retta locale del gradiente e threshold.
+                # Intersection time between the local gradient line and the threshold
                 split_time = x1 + (threshold - y1) / m
             else:
-                # In caso degenerato, usa il tempo sinistro come fallback locale.
+                # In the degenerate case, use the left time as a local fallback
                 split_time = x1
-            # Salva l'indice del campione destro del crossing trovato.
-            split_idx = i
             crossing_found = True
-            # Interrompe al primo crossing valido.
+            # Stop at the first valid crossing
             break
 
-    # Se non e stato trovato alcun crossing reale, attiva il fallback esplicito.
+    # If no real crossing was found, activate the explicit fallback
     if split_time is None:
         if strict_split:
             if return_diagnostics:
@@ -133,115 +133,133 @@ def analyze_baseline_trend(
                     "time_crop": time_diag,
                     "baseline_crop": baseline_diag,
                     "grad": grad,
-                    "grad_proc": grad_proc,
+                    "grad_proc": grad,
                     "threshold": float(threshold),
                     "peak_idx": int(peak_idx),
                     "peak_grad": float(peak_grad),
                     "mean_post_peak": float(mean_post_peak),
-                    "threshold_reference": float(threshold_reference),
+                    "threshold": float(threshold),
                     "split_time": None,
                     "split_grad": None,
                     "crossing_found": bool(crossing_found),
                 }
                 return None, "stable", diagnostics
             return None, "stable"
-        # Se non ci sono campioni nel tratto post-picco, usa l'ultimo campione disponibile.
-        if search_start >= len(grad_proc):
-            split_idx = len(grad_proc) - 1
+        # If there are no samples after the peak, use the last available sample
+        if search_start >= len(grad):
+            split_idx = len(grad) - 1
             split_time = float(time_search[split_idx])
-            split_grad = float(grad_proc[split_idx])
+            split_grad = float(grad[split_idx])
         else:
-            # Trova, nel tratto di ricerca, il campione con gradiente piu vicino alla threshold.
-            rel_idx = int(np.argmin(np.abs(grad_proc[search_start:] - threshold)))
-            # Converte l'indice relativo in indice assoluto su grad_proc.
+            # Find the sample closest to the threshold within the search segment
+            rel_idx = int(np.argmin(np.abs(grad[search_start:] - threshold)))
+            # Convert the relative index to an absolute gradient index
             split_idx = search_start + rel_idx
-            # Imposta split_time al tempo del campione piu vicino.
+            # Set split_time to the time of the closest sample
             split_time = float(time_search[split_idx])
-            # Imposta split_grad al valore del gradiente nel campione di fallback.
-            split_grad = float(grad_proc[split_idx])
+            # Set split_grad to the gradient value at the fallback sample
+            split_grad = float(grad[split_idx])
     else:
-        # Se c'e crossing reale, valuta il gradiente nel tempo di split tramite interpolazione.
-        split_grad = float(np.interp(split_time, time_search, grad_proc))
+        # If a real crossing exists, evaluate the gradient at split time by interpolation
+        split_grad = float(np.interp(split_time, time_search, grad))
 
-    # Costruisce la maschera dei punti successivi (o uguali) allo split per analizzare il trend post-split.
+    # Build a mask for points after (or equal to) the split to analyze the post-split trend
     post_mask = time_crop >= split_time
-    # Estrae il vettore tempo post-split.
+    # Extract the post-split time vector
     time_post = time_crop[post_mask]
-    # Estrae la baseline post-split.
+    # Extract the post-split baseline
     baseline_post = baseline_crop[post_mask]
 
-    # Se i punti post-split sono meno di 3, non e possibile stimare una regressione stabile.
+    # If fewer than 3 post-split points remain, a stable regression cannot be estimated
     if len(time_post) < 3:
-        # Se richiesto, prepara il dizionario diagnostico completo.
+        # Prepare the complete diagnostic dictionary if requested
         if return_diagnostics:
-            # Crea diagnostics con tutte le serie intermedie utili al debug.
+            # Create diagnostics with all intermediate series useful for debugging
             diagnostics = {
                 "time_crop": time_diag,
                 "baseline_crop": baseline_diag,
                 "grad": grad,
-                "grad_proc": grad_proc,
+                "grad_proc": grad,
                 "threshold": float(threshold),
                 "peak_idx": int(peak_idx),
                 "peak_grad": float(peak_grad),
                 "mean_post_peak": float(mean_post_peak),
-                "threshold_reference": float(threshold_reference),
+                "threshold": float(threshold),
                 "split_time": float(split_time),
                 "split_grad": split_grad,
                 "crossing_found": bool(crossing_found),
             }
-            # Restituisce split, trend stabile e diagnostics.
+            # Return split, stable trend, and diagnostics
             return float(split_time), "stable", diagnostics
-        # Restituisce split e trend stabile senza diagnostics.
+        # Return split and stable trend without diagnostics
         return float(split_time), "stable"
 
-    # Calcola la pendenza della regressione lineare della baseline nel tratto post-split.
+    # Calculate the slope of the baseline linear regression over the post-split segment
     slope = np.polyfit(time_post, baseline_post, 1)[0]
 
-    # Se la pendenza e positiva oltre soglia numerica, classifica il trend come crescente.
+    # If the slope is positive beyond the numerical threshold, classify the trend as increasing
     if slope > 1e-17:
-        # Trend crescente.
+        # Increasing trend
         trend = "increasing"
-    # Se la pendenza e negativa oltre soglia numerica, classifica il trend come decrescente.
+    # If the slope is negative beyond the numerical threshold, classify the trend as decreasing
     elif slope < -1e-17:
-        # Trend decrescente.
+        # Decreasing trend
         trend = "decreasing"
     else:
-        # Altrimenti classifica il trend come stabile.
+        # Otherwise, classify the trend as stable
         trend = "stable"
 
-    # Se richiesto, prepara il dizionario diagnostico finale.
+    # Prepare the final diagnostic dictionary if requested
     if return_diagnostics:
-        # Crea diagnostics con tutte le variabili principali del calcolo.
+        # Create diagnostics with all main calculation variables
         diagnostics = {
             "time_crop": time_diag,
             "baseline_crop": baseline_diag,
             "grad": grad,
-            "grad_proc": grad_proc,
+            "grad_proc": grad,
             "threshold": float(threshold),
             "peak_idx": int(peak_idx),
             "peak_grad": float(peak_grad),
             "mean_post_peak": float(mean_post_peak),
-            "threshold_reference": float(threshold_reference),
+            "threshold": float(threshold),
             "split_time": float(split_time),
             "split_grad": split_grad,
             "crossing_found": bool(crossing_found),
         }
-        # Restituisce split, trend e diagnostics completi.
+        # Return split, trend, and complete diagnostics
         return float(split_time), trend, diagnostics
 
-    # Restituisce split e trend quando diagnostics non sono richiesti.
+    # Return split and trend when diagnostics are not requested
     return float(split_time), trend
 
 def plot_bootstrap_regression(ax, x, y, trend, split_time, colors=None, style=None, tick_fontsize=None, ploteq=False):
     """
-    Plotta la retta di regressione e una banda di errore variabile nel tempo.
-    Se il trend è 'stable', assume una retta orizzontale e stima la banda con bootstrap.
+    Plot the post-split regression and its bootstrap uncertainty band
+
+    Parameters
+    ----------
+    ax : matplotlib.axes.Axes
+        Axes on which to draw the regression
+    x, y : array-like
+        Time samples and signal values
+    trend : str
+        Post-split trend classification
+    split_time : float
+        Time separating the pre-split and post-split data
+    colors : dict, optional
+        Plot color mapping
+    style : object, optional
+        Plot style configuration
+    tick_fontsize : int, optional
+        Font size for axis tick labels
+    ploteq : bool, optional
+        If True, draw the regression equation
     """
 
     x = np.array(x)
     y = np.array(y)
 
-    # Maschera: dati dopo lo split_time
+    # Mask: data after split_time
     mask = x >= split_time
     x_post = x[mask]
     y_post = y[mask]
@@ -249,14 +267,14 @@ def plot_bootstrap_regression(ax, x, y, trend, split_time, colors=None, style=No
     if len(x_post) < 3:
         return
 
-    # Assicura che il disegno parta esattamente da split_time anche quando
-    # split_time cade tra due time step campionati.
+    # Ensure that the plot starts exactly at split_time even when
+    # split_time falls between two sampled time steps
     if x_post[0] > split_time:
         x_plot = np.concatenate(([split_time], x_post))
     else:
         x_plot = x_post.copy()
 
-    # obtain color mapping (fallback to global style)
+    # Obtain color mapping (fallback to global style)
     if colors is None:
         try:
             colors = cfg.style.colors
@@ -272,7 +290,7 @@ def plot_bootstrap_regression(ax, x, y, trend, split_time, colors=None, style=No
     if trend == "stable":
         y_mean = np.nanmean(y_post)
 
-        # Bootstrap per banda di errore
+        # Bootstrap for the error band
         n_boot = 1000
         boot_means = np.empty(n_boot)
         for i in range(n_boot):
@@ -298,7 +316,7 @@ def plot_bootstrap_regression(ax, x, y, trend, split_time, colors=None, style=No
         slope, intercept = coeffs
         y_fit = np.polyval(coeffs, x_plot)
 
-        # Bootstrap per intervallo di confidenza
+        # Bootstrap for the confidence interval
         n_boot = 1000
         boot_preds = np.empty((n_boot, len(x_plot)))
         for i in range(n_boot):
@@ -315,7 +333,7 @@ def plot_bootstrap_regression(ax, x, y, trend, split_time, colors=None, style=No
 
         eqn = f"y = {slope:.2e}x + {intercept:.2e}"
 
-    # Inserisce equazione in basso a destra con parametri da config
+    # Add the equation in the lower-right corner using parameters from the config
     if ploteq:
         ax.text(
             0.98, 0.02,
@@ -330,7 +348,7 @@ def plot_bootstrap_regression(ax, x, y, trend, split_time, colors=None, style=No
         )
 
 
-# to check the processing procedure 
+# Check the processing procedure
 def plot_SR_processing_sequence(
     base_path,
     plast,
@@ -340,14 +358,11 @@ def plot_SR_processing_sequence(
     signal_name, # "Nemin" or "SRmean"
     output_dir="outputs/processing_steps",
     style=cfg.style,
-    threshold_ratio=cfg.threshold_sr,
     pre_smoothing_sigma=cfg.smoothing_sigma,
     min_nemin_max=cfg.nmin_nemin_max,
 ):
     """
-    
-    Build the final diagnostic plot for one SR2 trace without touching the
-    dataframe.
+    Build the diagnostic plot for one SR2 trace without modifying the dataframe
 
     Parameters
     ----------
@@ -359,18 +374,12 @@ def plot_SR_processing_sequence(
         "Nemin" or "SRmean".
     output_dir : str, optional
         Root directory where diagnostic images are saved.
-    threshold_ratio : float, optional
-        Fraction of peak gradient used to define the split threshold.
     pre_smoothing_sigma : float, optional
         Sigma for Gaussian smoothing applied to the signal before split
         analysis.
     min_nemin_max : float, optional
         Execute the processing sequence only if max(Nemin) for the selected
-        parameter combination is strictly greater than this value.
-    Returns
-    -------
-    dict
-        Summary with output path, split time, trend and number of saved frames.
+        parameter combination is strictly greater than this value
     """
     os.makedirs(output_dir, exist_ok=True)
 
@@ -379,7 +388,6 @@ def plot_SR_processing_sequence(
     font_family = style.font_family
     fig_facecolor = style.fig_facecolor
     axes_facecolor = style.axes_facecolor
-    title_fontsize = style.title_fontsize
     label_fontsize = style.axis_label_fontsize
     tick_fontsize = style.tick_fontsize
     tick_length   = style.tick_length
@@ -401,7 +409,6 @@ def plot_SR_processing_sequence(
     else:
         filename = f"SR2_{visc}_{plast}_{mod_code}_{vel_code}.txt"
     path = os.path.join(base_path, filename)
-    tag = f"{signal_key}_{mod_code}_{vel_code}_{visc}_{plast}"
     os.makedirs(output_dir, exist_ok=True)
 
     if not os.path.exists(path):
@@ -415,7 +422,7 @@ def plot_SR_processing_sequence(
     Nemin = np.nan_to_num(np.asarray(data[:, 2], dtype=float), nan=0.0)
     SRmean = np.nan_to_num(np.asarray(data[:, 3], dtype=float), nan=0.0) *1e16
 
-    # Run diagnostic sequence only when the selected signal reaches a meaningful peak.
+    # Run diagnostic sequence only when the selected signal reaches a meaningful peak
     nemin_max = float(np.nanmax(Nemin)) if Nemin.size > 0 else 0.0
     srmean_max = float(np.nanmax(SRmean)) if SRmean.size > 0 else 0.0
     signal_max = nemin_max if signal_key == "nemin" else srmean_max
@@ -460,7 +467,6 @@ def plot_SR_processing_sequence(
     split_time, trend_plot, diagnostics_plot = analyze_baseline_trend(
         tempo,
         baseline_plot,
-        threshold_ratio=float(threshold_ratio),
         return_diagnostics=True,
         strict_split=True,
         split_mask=split_mask,
@@ -527,7 +533,7 @@ def plot_SR_processing_sequence(
                 bbox=dict(facecolor=style.fig_facecolor, edgecolor=style.label_color, boxstyle="round,pad=0.25", alpha=0.9),
             )
 
-        # Top panel: final step.
+        # Top panel: final result
         ax_top.plot(tempo, raw_signal, color=colors["raw"], linewidth=secondary_lw, label="original")
         ax_top.plot(tempo, baseline_plot, color=colors["baseline"], linewidth=main_lw, label="smoothed")
         if split_time is not None:
@@ -546,52 +552,31 @@ def plot_SR_processing_sequence(
                     markersize=4,
                     label=fr"$t_{{SL}}$ = {split_time:.1f} ± {split_time_sigma:.2f} Myr",
                 )
-            #elif np.isfinite(split_time_sigma):
-            #    ax_top.plot(
-            #        split_time,
-            #        y_split,
-            #        "o",
-            #                color=colors["split"],
-            #        markersize=4,
-            #        label=f"split = {split_time:.1f}",
-            #    )
-            #else:
-            #    ax_top.plot([], [], color="none", label=f"split = {split_time:.1f} Myr")
             plot_bootstrap_regression(ax_top, tempo, baseline_plot, trend_plot, split_time, style=style)
         ax_top.set_ylabel(signal_label, fontsize=label_fontsize, color=style.label_color, labelpad=style.label_pad)
         ax_top.set_xlim(float(np.nanmin(tempo)), float(np.nanmax(tempo)))
         ax_top.tick_params(axis="x", labelbottom=False, labelsize=tick_fontsize, length=tick_length, colors=style.label_color)
         ax_top.tick_params(axis="y", labelsize=tick_fontsize, length=tick_length, colors=style.label_color)
-        #ax_top.grid(True, linestyle="--", linewidth=grid_lw, alpha=0.6)
         ax_top.legend(loc="best", fontsize=legend_fontsize, facecolor=style.legend_facecolor, edgecolor=style.legend_edgecolor, labelcolor=style.legend_text_color)
 
         # Bottom panel: derivative
         time_crop = diagnostics_plot["time_crop"]
-        grad = diagnostics_plot["grad"]
         grad_proc = diagnostics_plot["grad_proc"]
         threshold = float(diagnostics_plot["threshold"])
-        threshold_reference = float(diagnostics_plot.get("threshold_reference", 0.0))
         grad_label = "gradient"
 
-        #ax_bot.plot(time_crop, grad, color=colors["gradient"], linewidth=main_lw, alpha=0.7, label="grad")
         ax_bot.plot(time_crop, grad_proc, color=colors["gradient_processed"], linewidth=main_lw, label=grad_label)
 
         ax_bot.axhline(threshold, color=colors["threshold"], linestyle=linestyles["threshold"], linewidth=secondary_lw,
                        label=f"threshold={threshold:.2f}")
 
         if split_time is not None:
-            #split_grad = float(diagnostics_plot.get("split_grad", np.interp(split_time, time_crop, grad_proc)))
             ax_bot.axvline(split_time, color=colors["split"], linestyle=linestyles["split"], linewidth=split_lw, label=fr"$t_{{SL}}$ = {split_time:.1f} Myr")
-            #ax_bot.plot([split_time], [threshold], marker="o", color=colors["split"], markersize=4,
-            #            label="split-threshold")
-            #ax_bot.plot([split_time], [split_grad], marker="x", color=colors["gradient_processed"], markersize=6,
-            #            label="split on gradient")
 
         ax_bot.set_xlabel("Time [Myr]", fontsize=label_fontsize, color=style.label_color, labelpad=style.label_pad)
         ax_bot.set_ylabel(derivative_label, fontsize=label_fontsize, color=style.label_color, labelpad=style.label_pad)
         ax_bot.tick_params(axis="x", labelsize=tick_fontsize, length=tick_length, colors=style.label_color)
         ax_bot.tick_params(axis="y", labelsize=tick_fontsize, length=tick_length, colors=style.label_color)
-        #ax_bot.grid(True, linestyle="--", linewidth=grid_lw, alpha=0.6)
         ax_bot.legend(loc="best", fontsize=legend_fontsize, facecolor=style.legend_facecolor, edgecolor=style.legend_edgecolor, labelcolor=style.legend_text_color)
 
         fig.tight_layout()
@@ -600,7 +585,7 @@ def plot_SR_processing_sequence(
         plt.close(fig)
         frame_idx += 1
     else:
-        # Final panel with split and regression overlay.
+        # Final panel with split and regression overlay
         fig, ax = plt.subplots(figsize=processing_small_figsize)
         if fig_facecolor is not None:
             fig.patch.set_facecolor(fig_facecolor)
@@ -659,9 +644,28 @@ def plot_SR_processing_sequence(
     }
 
 
-# Obtain the split times and trends for all the SR2 traces, and save the results in the dataframe. 
+# Obtain split times and trends for all SR2 traces and save the results in the dataframe
 def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outputs/"
 ):
+    """
+    Analyse and plot split times and trends for all SR2 traces of each model
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Dataframe containing one row for each model configuration
+    base_path : str
+        Directory containing SR2 tracking files
+    params : object
+        Model ordering, labels, and parameter configuration
+    maps : object
+        Model and velocity mappings
+    style : object
+        Plot style configuration
+    output_dir : str, optional
+        Directory where generated figures are saved
+    """
+
     os.makedirs(output_dir, exist_ok=True)
 
     colors = style.colors
@@ -673,7 +677,7 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
     secondary_lw = style.secondary_linewidth
     split_lw = style.split_linewidth
 
-    # Add columns to df
+    # Add columns to the dataframe
     new_cols = [
         "t_SL_A", "trend_A", "t_SL_mSR", "trend_mSR"
     ]
@@ -692,7 +696,7 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
         velocities = params.vel_order if mod_code != 'spont' else [None]
 
         for vel_code in velocities:
-            # prepare the plot
+            # Prepare the plot
             fig, axes = plt.subplots(nrows=6, ncols=3, figsize=(32, 54), sharex=True)
             vel_str = f"v = {params.vel_labels[vel_code]} cm/yr, " if vel_code is not None else ""
             fig.suptitle(f"Strain rate evolution ({vel_str}{mod_title})", fontsize=title_fontsize)
@@ -709,7 +713,7 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
                         try:
                             # Read the SR tracking file
                             data = np.loadtxt(path, skiprows=1)
-                            tempo, Nelem, Nemin, SRmean = data[:, 0], data[:, 1], data[:, 2], data[:, 3]*1e16
+                            tempo, Nemin, SRmean = data[:, 0], data[:, 2], data[:, 3] * 1e16
 
                             Nemin[0] = 0
                             SRmean[0] = 0
@@ -719,7 +723,7 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
                             nemin_max = float(np.nanmax(Nemin)) if Nemin.size > 0 else 0.0
                             do_split_analysis = nemin_max > float(cfg.nmin_nemin_max)
 
-                            # Process Nemin time series (aligned with plot_SR_processing_sequence).
+                            # Process the Nemin time series (aligned with plot_SR_processing_sequence)
                             baseline_Nemin = gaussian_filter1d(Nemin.copy(), sigma=float(cfg.smoothing_sigma))
                             if baseline_Nemin.size > 0:
                                 baseline_Nemin[0] = 0.0
@@ -728,11 +732,10 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
                                 split_Nemin, trend_Nemin = analyze_baseline_trend(
                                     tempo,
                                     baseline_Nemin,
-                                    threshold_ratio=float(cfg.threshold_sr),
                                     strict_split=True,
                                 )
 
-                            # Process SRmean time series (aligned with plot_SR_processing_sequence).
+                            # Process the SRmean time series (aligned with plot_SR_processing_sequence)
                             baseline_SRmean = gaussian_filter1d(SRmean.copy(), sigma=float(cfg.smoothing_sigma))
                             if baseline_SRmean.size > 0:
                                 baseline_SRmean[0] = 0.0
@@ -741,13 +744,12 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
                                 split_SRmean, trend_SRmean = analyze_baseline_trend(
                                     tempo,
                                     baseline_SRmean,
-                                    threshold_ratio=float(cfg.threshold_sr),
                                     strict_split=True,
                                     split_mask=(Nemin >= float(cfg.nmin_nemin_max)),
                                 )
 
                             
-                            # --- Update df with results
+                            # --- Update the dataframe with the results
                             mask = (
                                 (df["plastic_weakening"] == plast) &
                                 (df["viscous_weakening"] == visc) &
@@ -771,7 +773,6 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
                             ax_Nemin.plot(tempo, baseline_Nemin, color=colors["baseline"], linewidth=secondary_lw, label='smoothed')
                             if do_split_analysis and split_Nemin is not None:
                                 ax_Nemin.axvline(split_Nemin, color=colors["split"], linestyle=linestyles["split"], linewidth=split_lw, label=fr"$t_{{SL}}$ = {split_Nemin:.2f} Myr")
-                                #ax_Nemin.text(split_Nemin, np.max(Nemin) * 0.9, f'Trend: {trend_Nemin}', fontsize=tick_fontsize, rotation=90)
                                 ax_Nemin.text(split_Nemin, np.max(Nemin) * 0.1, fr"{split_Nemin:.2f} Myr", fontsize=tick_fontsize, rotation=90)
                                 plot_bootstrap_regression(ax_Nemin, tempo, baseline_Nemin, trend_Nemin, split_Nemin)
                             
@@ -780,12 +781,11 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
                             ax_SRmean.plot(tempo, baseline_SRmean, color=colors["baseline"], linewidth=secondary_lw, label='smoothed')
                             if do_split_analysis and split_SRmean is not None:
                                 ax_SRmean.axvline(split_SRmean, color=colors["split"], linestyle=linestyles["split"], linewidth=split_lw, label=fr"$t_{{SL}}$ = {split_SRmean:.2f} Myr")
-                                #ax_SRmean.text(split_SRmean, np.max(SRmean) * 0.9, f'Trend: {trend_SRmean}', fontsize=tick_fontsize, rotation=90)
                                 ax_SRmean.text(split_SRmean, np.max(SRmean) * 0.1, fr"{split_SRmean:.2f} Myr", fontsize=tick_fontsize, rotation=90)
                                 plot_bootstrap_regression(ax_SRmean, tempo, baseline_SRmean, trend_SRmean, split_SRmean)
                             
                         except Exception as e:
-                            print(f"⚠️ Error with file {filename}: {e}")
+                            print(f"Error with file {filename}: {e}")
 
                     if i == 0:
                         ax_Nemin.set_title(params.viscosities_titles[j], fontsize=axis_fontsize, pad=cfg.style.title_pad)
@@ -806,15 +806,5 @@ def plot_SRabs_singleModel(df, base_path, params, maps, style, output_dir="outpu
 
     print("   Dataframe updated with the strain rate analysis results")
     return df
-
-
-
-
-
-# Nice figures for comparing the strain rate localization time with the weakening percentages and areas at that time, for all models.
-
-
-
-# Visualization functions for raw Strain Rate
 
     

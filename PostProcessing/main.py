@@ -1,21 +1,25 @@
 import sys
-
 import config as cfg
 from preprocessing import create_df, load_df
 from StrainRate import plot_SR_processing_sequence
 
 
 def main():
+    """
+    Run the database generation, loading, and diagnostic plotting workflow
+
+    The executed stages are controlled by the flags defined in ``config.py``
+    """
     if cfg.CREATE_DATABASE:
         print(" > Generating strain-rate database from SR2 tracking files...")
-        create_df(cfg.TRACKING_DIRECTORY, cfg.SI_depth, cfg.params, cfg.maps, cfg.style)
+        create_df(cfg.TRACKING_DIRECTORY, cfg.params, cfg.maps, cfg.style)
 
     if not cfg.LOAD_DATABASE:
         print("No database loaded. Exiting.")
         sys.exit(0)
 
     print(" > Loading database...")
-    df = load_df(cfg.maps)
+    load_df(cfg.maps)
 
     if cfg.PLOT_SR_DIAGNOSTIC:
         print(" > Plotting strain-rate diagnostic sequences...")
