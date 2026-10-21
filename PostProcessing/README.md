@@ -1,6 +1,6 @@
 # Post Processing
 
-This directory processes the model results and produces:
+The scripts in this directory process the model results and produce:
 
 - the tracking files, containing the evolution of the strain rate within the Ocean-Continent Transition (OCT) for all models
 - the complete `sr_raw` panels, with every `Nemin` and `SRmean` series for every model, velocity, plasticity and viscosity;
@@ -18,9 +18,9 @@ The Python workflow (Step 2) expects their `SR2_*.txt` output under `../Tracking
     gfortran SRTracking.f90
 ```
 
-## Step 2: python workflow
+## Step 2: Python workflow
 
-The python workflow assesses the time of strain rate localisation and subduction zone initition starting from the tracking files, which are the output of the Step 1.
+The Python workflow assesses the time of strain rate localisation and subduction zone initiation starting from the tracking files, which are the output of Step 1.
 
 ``` bash
     python3 main.py
@@ -28,11 +28,11 @@ The python workflow assesses the time of strain rate localisation and subduction
 
 ### config.py
 
-Sets directories, colors, variables and parameters for the post processing of the tracking files. Set the analysis you want to perform. 
+Sets directories, colours, variables and parameters for the post processing of the tracking files. Set the analysis you want to perform. 
 
 ### main.py
 
-loads the modules and calls the functions using the parameters, the directories and the options set in config.py. This is the code that has to be run.
+Loads the modules and calls the functions using the parameters, the directories and the options set in config.py. This is the code that has to be run.
 
 ### StrainRate.py
 
