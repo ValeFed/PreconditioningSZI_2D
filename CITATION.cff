@@ -1,0 +1,25 @@
+cff-version: 1.2.0
+message: "If you use these files, please cite them as below."
+type: software
+title: "Post processing code for assessing SZI time in 2D passive margin SZI models"
+abstract: >-
+  Input files and post-processing codes used in the paper: "Preconditioning
+  of subduction zone initiation at passive margins by gravitational
+  instabilities". Pre-review version.
+authors:
+  - family-names: Fedeli
+    given-names: Valeria
+    affiliation: "Università degli Studi di Milano"
+    orcid: "https://orcid.org/0009-0007-6313-9041"
+version: 1.0.0
+license: MIT
+keywords:
+  - subduction zone initiation
+  - passive margins
+  - gravitational instabilities
+  - geodynamics
+  - thermo-mechanical modelling
+  - strain localisation
+  - strain rate localisation
+  - geodynamic modelling
+  - subduction modelling
