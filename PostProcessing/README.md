@@ -1,6 +1,6 @@
 # Post Processing
 
-This directory processes the model results and produces:
+The scripts in this directory process the model results and produce:
 
 - the tracking files, containing the evolution of the strain rate within the Ocean-Continent Transition (OCT) for all models
 - the complete `sr_raw` panels, with every `A` and `mSR` series for every model, velocity, plasticity and viscosity;
