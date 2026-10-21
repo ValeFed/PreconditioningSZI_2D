@@ -12,6 +12,7 @@ authors:
     affiliation: "Università degli Studi di Milano"
     orcid: "https://orcid.org/0009-0007-6313-9041"
 version: 1.0.0
+doi: 10.5281/zenodo.23535755
 license: MIT
 keywords:
   - subduction zone initiation
