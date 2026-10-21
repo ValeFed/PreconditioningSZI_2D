@@ -1,5 +1,5 @@
 # PreconditioningSZI_2D
-   [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXXX)
+   [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg)](https://doi.org/10.5281/zenodo.23535755)
    
 Input files and post-processing codes used in the paper: "Preconditioning of subduction zone initiation at passive margins by gravitational instabilities".
 
